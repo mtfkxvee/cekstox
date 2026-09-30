@@ -1,9 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Alert, Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { canValidate } from '../opname';
-import { APK_URL, checkUpdate, UpdateInfo } from '../update';
 import { c } from '../ui';
 
 type Menu = { route: string; title: string; desc: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string };
@@ -19,11 +17,6 @@ export default function HomeScreen({ navigation, user, onLogout }: any) {
   const insets = useSafeAreaInsets();
   const name = String(user).split('@')[0];
   const manager = canValidate();
-  const [update, setUpdate] = useState<UpdateInfo | null>(null);
-
-  useEffect(() => {
-    checkUpdate().then(setUpdate);
-  }, []);
 
   const confirmLogout = () =>
     Alert.alert('Keluar?', 'Anda harus login lagi untuk memakai aplikasi.', [
@@ -51,19 +44,6 @@ export default function HomeScreen({ navigation, user, onLogout }: any) {
       </View>
 
       <ScrollView style={{ marginTop: -36 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}>
-        {update && (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => Linking.openURL(APK_URL)}
-            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff7e0', borderColor: '#f0d98a', borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 12 }}>
-            <Ionicons name='cloud-download-outline' size={26} color='#b7791f' />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={{ fontWeight: '700', color: c.text }}>Versi {update.version} tersedia</Text>
-              <Text style={{ color: c.muted, fontSize: 12 }}>{update.notes || 'Ketuk untuk mengunduh pembaruan'}</Text>
-            </View>
-            <Text style={{ color: c.primary, fontWeight: '700' }}>Perbarui</Text>
-          </TouchableOpacity>
-        )}
         {MENUS.map((m) => (
           <TouchableOpacity
             key={m.route}
