@@ -25,6 +25,9 @@
       "permissions": [
         "CAMERA",
         "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "CAMERA",
+        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -47,7 +50,8 @@
               "arm64-v8a"
             ],
             "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableMinifyInReleaseBuilds": true
           }
         }
       ]
@@ -57,6 +61,12 @@
       "eas": {
         "projectId": "f131e448-a0db-49e4-8ae0-cecb36c0761d"
       }
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f131e448-a0db-49e4-8ae0-cecb36c0761d"
     }
   }
 }
