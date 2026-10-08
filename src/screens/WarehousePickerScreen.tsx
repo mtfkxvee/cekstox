@@ -5,13 +5,14 @@ import { s } from '../ui';
 /** route.params: names (daftar gudang), onPick(warehouse) dipanggil saat dipilih lalu layar menutup. */
 export default function WarehousePickerScreen({ navigation, route }: any) {
   const all: string[] = route.params.names;
+  const labels: Record<string, string> = route.params.labels ?? {};
   const [q, setQ] = useState('');
 
   useEffect(() => {
     navigation.setOptions({ title: route.params.title ?? 'Pilih Gudang' });
   }, [navigation, route.params.title]);
 
-  const list = all.filter((w) => w.toLowerCase().includes(q.toLowerCase()) && w !== route.params.exclude);
+  const list = all.filter((w) => (w + ' ' + (labels[w] ?? '')).toLowerCase().includes(q.toLowerCase()) && w !== route.params.exclude);
 
   return (
     <View style={s.screen}>
@@ -28,7 +29,7 @@ export default function WarehousePickerScreen({ navigation, route }: any) {
               route.params.onPick(item);
               navigation.goBack();
             }}>
-            <Text style={s.title}>{item}</Text>
+            <Text style={s.title}>{labels[item] ?? item}</Text>
           </TouchableOpacity>
         )}
       />

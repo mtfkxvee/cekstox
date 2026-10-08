@@ -7,7 +7,8 @@ import { c, s } from '../ui';
 const LABEL: Record<LocState, { text: string; color: string }> = {
   tersedia: { text: 'Tersedia', color: c.primary },
   terisi: { text: 'Sedang diisi', color: '#b7791f' },
-  menunggu: { text: 'Menunggu validasi', color: '#b7791f' },
+  cek: { text: 'Menunggu cek ulang', color: '#b7791f' },
+  menunggu: { text: 'Menunggu validasi', color: c.primary },
   divalidasi: { text: 'Divalidasi', color: c.ok },
   ditolak: { text: 'Ditolak', color: c.danger },
 };
@@ -58,7 +59,7 @@ export default function OpnameDetailScreen({ navigation, route }: any) {
             },
           },
         ]);
-      navigation.navigate('Review', { loc: l.name, lokasi: l.lokasi, manager: manager && st === 'menunggu' });
+      navigation.navigate('Review', { loc: l.name, lokasi: l.lokasi });
     } catch (e: any) {
       setErr(e.message);
     }
@@ -101,7 +102,7 @@ export default function OpnameDetailScreen({ navigation, route }: any) {
             <TouchableOpacity style={[s.card, s.row, { justifyContent: 'space-between' }]} onPress={() => open(item)}>
               <View style={{ flex: 1 }}>
                 <Text style={s.title}>{item.lokasi}</Text>
-                <Text style={s.muted}>{item.name}{item.counted_by ? ` · ${item.counted_by}` : ''}</Text>
+                <Text style={s.muted}>{item.name}{item.counted_by ? ` · ${item.counted_by}` : ''}{item.lokasi_kosong ? ' · lokasi kosong' : ''}</Text>
               </View>
               <Text style={{ color: L.color, fontWeight: '600' }}>{L.text}</Text>
             </TouchableOpacity>

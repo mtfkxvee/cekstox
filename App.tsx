@@ -6,6 +6,9 @@ import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { logout, savedUser } from './src/api';
 import { loadRoles } from './src/opname';
+import ReceiveListScreen from './src/screens/ReceiveListScreen';
+import ReceiveScreen from './src/screens/ReceiveScreen';
+import AturRakScreen from './src/screens/AturRakScreen';
 import HistoryDetailScreen from './src/screens/HistoryDetailScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -67,6 +70,9 @@ export default function App() {
           <Stack.Screen name="Transfer" component={TransferScreen} options={{ title: 'Pindah Stok' }} />
           <Stack.Screen name="History" component={HistoryScreen} options={{ title: 'Riwayat Pindah Stok' }} />
           <Stack.Screen name="HistoryDetail" component={HistoryDetailScreen} />
+          <Stack.Screen name="ReceiveList" component={ReceiveListScreen} options={{ title: 'Terima Stok (PO)' }} />
+          <Stack.Screen name="Receive" component={ReceiveScreen} />
+          <Stack.Screen name="AturRak" component={AturRakScreen} options={{ title: 'Atur Rak' }} />
           <Stack.Screen name="WarehousePicker" component={WarehousePickerScreen} />
         </Stack.Navigator>
       </NavigationContainer>

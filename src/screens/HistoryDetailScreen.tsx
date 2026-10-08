@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { cancelEntry, getEntry } from '../history';
 import { canCancelEntry } from '../opname';
+import { shelfLabelOf } from '../shelving';
 import { c, s } from '../ui';
 import { STATUS, STATUS_COLOR } from './HistoryScreen';
 
@@ -62,6 +63,11 @@ Stok akan dikembalikan: gudang asal bertambah, gudang tujuan berkurang.`, [
             <View style={{ flex: 1 }}>
               <Text style={s.title}>{item.item_name}</Text>
               <Text style={s.muted}>{item.item_code}</Text>
+              {(!!item.from_shelving || !!item.to_shelving) && (
+                <Text style={s.muted}>
+                  Rak: {item.from_shelving ? shelfLabelOf(item.from_shelving) : '-'} → {item.to_shelving ? shelfLabelOf(item.to_shelving) : '-'}
+                </Text>
+              )}
             </View>
             <Text style={{ fontSize: 18, fontWeight: '700' }}>{item.qty} <Text style={s.muted}>{item.uom}</Text></Text>
           </View>

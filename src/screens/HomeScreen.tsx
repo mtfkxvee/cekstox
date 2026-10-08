@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { canValidate } from '../opname';
+import { canUseStock, canValidate } from '../opname';
 import { c } from '../ui';
 
 type Menu = { route: string; title: string; desc: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string };
@@ -10,6 +10,8 @@ const MENUS: Menu[] = [
   { route: 'Stock', title: 'Cek Stok', desc: 'Lihat stok barang per gudang', icon: 'search', color: '#1f6feb', bg: '#e3eeff' },
   { route: 'OpnameList', title: 'Stok Opname', desc: 'Hitung fisik per lokasi', icon: 'clipboard', color: '#1a7f37', bg: '#dcf5e3' },
   { route: 'Transfer', title: 'Pindah Stok', desc: 'Transfer barang antar gudang', icon: 'swap-horizontal', color: '#c2570c', bg: '#ffe9d6' },
+  { route: 'AturRak', title: 'Atur Rak', desc: 'Put-away, pindah rak, keluarkan dari rak', icon: 'layers', color: '#9333ea', bg: '#f1e4fd' },
+  { route: 'ReceiveList', title: 'Terima Stok', desc: 'Penerimaan barang dari Purchase Order', icon: 'download', color: '#0f766e', bg: '#d5f2ee' },
   { route: 'History', title: 'Riwayat Pindah Stok', desc: 'Daftar transfer stok gudang Anda', icon: 'time', color: '#6f42c1', bg: '#ece4fa' },
 ];
 
@@ -17,6 +19,9 @@ export default function HomeScreen({ navigation, user, onLogout }: any) {
   const insets = useSafeAreaInsets();
   const name = String(user).split('@')[0];
   const manager = canValidate();
+  const full = canUseStock();
+  // role Stock Opname Staff hanya punya akses Stok Opname
+  const menus = full ? MENUS : MENUS.filter((m) => m.route === 'OpnameList');
 
   const confirmLogout = () =>
     Alert.alert('Keluar?', 'Anda harus login lagi untuk memakai aplikasi.', [
@@ -33,7 +38,7 @@ export default function HomeScreen({ navigation, user, onLogout }: any) {
             <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700' }} numberOfLines={1}>{name}</Text>
             <View style={{ flexDirection: 'row', marginTop: 8 }}>
               <View style={{ backgroundColor: '#ffffff26', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 }}>
-                <Text style={{ color: '#fff', fontSize: 12 }}>{manager ? 'Stock Manager' : 'Staf Gudang'}</Text>
+                <Text style={{ color: '#fff', fontSize: 12 }}>{manager ? 'Stock Manager' : full ? 'Staf Gudang' : 'Staf Opname'}</Text>
               </View>
             </View>
           </View>
@@ -44,7 +49,7 @@ export default function HomeScreen({ navigation, user, onLogout }: any) {
       </View>
 
       <ScrollView style={{ marginTop: -36 }} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}>
-        {MENUS.map((m) => (
+        {menus.map((m) => (
           <TouchableOpacity
             key={m.route}
             activeOpacity={0.8}

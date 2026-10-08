@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { login } from '../api';
-import { ERP_URL } from '../config';
+import { login, loginWithToken } from '../api';
+import { AUTH_SERVER_URL, ERP_URL } from '../config';
 import { c } from '../ui';
 
 export default function LoginScreen({ onDone }: { onDone: () => void }) {
@@ -14,6 +16,28 @@ export default function LoginScreen({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const pwdRef = useRef<TextInput>(null);
+
+  // Login Google lewat server auth (folder server/): browser sistem -> Google -> kembali ke cekstox://auth
+  const google = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const back = Linking.createURL('auth');
+      const res = await WebBrowser.openAuthSessionAsync(`${AUTH_SERVER_URL}/auth/google/start?client_redirect=${encodeURIComponent(back)}`, back);
+      if (res.type !== 'success') return setErr('Login Google dibatalkan.');
+      const p = Linking.parse(res.url).queryParams ?? {};
+      const get = (k: string) => (Array.isArray(p[k]) ? (p[k] as string[])[0] : (p[k] as string | undefined));
+      if (get('ok') !== '1' || !get('token') || !get('user')) return setErr(get('message') || 'Login Google gagal.');
+      await loginWithToken(get('user')!, get('token')!);
+      if (get('isNew') === '1') Alert.alert('Akun dibuat', 'Akun Anda didaftarkan sebagai Stock User.');
+      onDone();
+    } catch (e: any) {
+      setErr(e.message || 'Login Google gagal.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async () => {
     if (!usr.trim() || !pwd || busy) return;
@@ -108,6 +132,24 @@ export default function LoginScreen({ onDone }: { onDone: () => void }) {
             style={{ backgroundColor: c.primary, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 6, opacity: busy || !usr.trim() || !pwd ? 0.5 : 1 }}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Masuk</Text>}
           </TouchableOpacity>
+
+          {!!AUTH_SERVER_URL && (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 18 }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+                <Text style={{ marginHorizontal: 12, color: '#9aa4b2' }}>atau</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={busy}
+                onPress={google}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingVertical: 14, borderWidth: 1, borderColor: '#d0d7de', backgroundColor: '#fff', opacity: busy ? 0.5 : 1 }}>
+                <Ionicons name='logo-google' size={20} color='#db4437' />
+                <Text style={{ marginLeft: 10, fontSize: 16, fontWeight: '600', color: c.text }}>Masuk dengan Google</Text>
+              </TouchableOpacity>
+            </>
+          )}
 
           <Text style={{ textAlign: 'center', color: '#9aa4b2', fontSize: 12, marginTop: 'auto', paddingTop: 28 }}>{ERP_URL.replace('https://', '')}</Text>
         </View>

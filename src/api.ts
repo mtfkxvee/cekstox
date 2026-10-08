@@ -6,8 +6,19 @@ export type BinRow = { warehouse: string; actual_qty: number; reserved_qty: numb
 
 const K_USER = 'erp_usr';
 const K_PWD = 'erp_pwd';
+const K_TOKEN = 'erp_token'; // login Google: 'api_key:api_secret' milik user (tanpa cookie/CSRF)
 
 let csrf: string | null = null;
+let token: string | null = null;
+let tokenLoaded = false;
+
+async function getToken() {
+  if (!tokenLoaded) {
+    token = await SecureStore.getItemAsync(K_TOKEN);
+    tokenLoaded = true;
+  }
+  return token;
+}
 let loginPromise: Promise<void> | null = null;
 
 async function doLogin(usr: string, pwd: string) {
@@ -23,15 +34,33 @@ async function doLogin(usr: string, pwd: string) {
 
 export async function login(usr: string, pwd: string) {
   await doLogin(usr, pwd);
+  await SecureStore.deleteItemAsync(K_TOKEN);
+  token = null;
+  tokenLoaded = true;
   await SecureStore.setItemAsync(K_USER, usr);
   await SecureStore.setItemAsync(K_PWD, pwd);
 }
 
-export async function logout() {
-  try {
-    await fetch(`${ERP_URL}/api/method/logout`, { method: 'POST', credentials: 'include' });
-  } catch {}
+/** Login Google: server auth mengembalikan token API milik user. */
+export async function loginWithToken(user: string, apiToken: string) {
+  await SecureStore.setItemAsync(K_USER, user);
+  await SecureStore.setItemAsync(K_TOKEN, apiToken);
+  await SecureStore.deleteItemAsync(K_PWD);
+  token = apiToken;
+  tokenLoaded = true;
   csrf = null;
+}
+
+export async function logout() {
+  if (!(await getToken())) {
+    try {
+      await fetch(`${ERP_URL}/api/method/logout`, { method: 'POST', credentials: 'include' });
+    } catch {}
+  }
+  csrf = null;
+  token = null;
+  tokenLoaded = true;
+  await SecureStore.deleteItemAsync(K_TOKEN);
   await SecureStore.deleteItemAsync(K_USER);
   await SecureStore.deleteItemAsync(K_PWD);
 }
@@ -73,13 +102,22 @@ export async function request(path: string, init: Init = {}, retry = true): Prom
       .join('&');
     url += `?${q}`;
   }
+  const apiToken = await getToken();
   const headers: Record<string, string> = { Accept: 'application/json' };
+  if (apiToken) headers.Authorization = `token ${apiToken}`;
   if (method !== 'GET') {
     headers['Content-Type'] = 'application/json';
-    headers['X-Frappe-CSRF-Token'] = await getCsrf();
+    if (!apiToken) headers['X-Frappe-CSRF-Token'] = await getCsrf();
   }
-  const res = await fetch(url, { method, credentials: 'include', headers, body: init.body ? JSON.stringify(init.body) : undefined });
-  if ((res.status === 401 || res.status === 403) && retry) {
+  const res = await fetch(url, { method, credentials: apiToken ? 'omit' : 'include', headers, body: init.body ? JSON.stringify(init.body) : undefined });
+  if (apiToken && res.status === 401) {
+    // token tidak berlaku lagi (mis. login Google di HP lain) -> hapus agar app meminta login ulang
+    await SecureStore.deleteItemAsync(K_TOKEN);
+    await SecureStore.deleteItemAsync(K_USER);
+    token = null;
+    throw new Error('Sesi berakhir, tutup lalu buka aplikasi dan login lagi.');
+  }
+  if (!apiToken && (res.status === 401 || res.status === 403) && retry) {
     await relogin();
     return request(path, init, false);
   }
@@ -147,7 +185,17 @@ export async function getAvailable(item: string, warehouse: string): Promise<num
   return r.data[0]?.actual_qty ?? 0;
 }
 
-export type TransferLine = { item: string; item_name: string; uom: string; qty: number; avail: number };
+export type TransferLine = {
+  item: string;
+  item_name: string;
+  uom: string;
+  qty: number;
+  avail: number;
+  /** stok item ini per rak di gudang asal (hanya jika gudang asal memakai rak) */
+  stocks?: { shelving: string; qty: number }[];
+  fromShelving?: string | null;
+  toShelving?: string | null;
+};
 
 /** Stock Entry bertipe PINDAH STOK (purpose Material Transfer): dibuat lalu langsung di-submit. Kalau submit gagal, draft tetap ada di XERP. */
 export type TransferOpts = { costCenter?: string | null };
@@ -163,7 +211,15 @@ export async function createTransfer(from: string, to: string, lines: TransferLi
       from_warehouse: from,
       to_warehouse: to,
       ...(opts.costCenter ? { cost_center: opts.costCenter } : {}),
-      items: lines.map((l) => ({ item_code: l.item, qty: l.qty, s_warehouse: from, t_warehouse: to, ...(opts.costCenter ? { cost_center: opts.costCenter } : {}) })),
+      items: lines.map((l) => ({
+        item_code: l.item,
+        qty: l.qty,
+        s_warehouse: from,
+        t_warehouse: to,
+        ...(l.fromShelving ? { from_shelving: l.fromShelving } : {}),
+        ...(l.toShelving ? { to_shelving: l.toShelving } : {}),
+        ...(opts.costCenter ? { cost_center: opts.costCenter } : {}),
+      })),
     },
   });
   try {

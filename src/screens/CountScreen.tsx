@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Switch, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
 import { findByBarcode, Item, searchItems } from '../api';
 import { CountLine, submitLocation } from '../opname';
+import { onScrollFail, revealRow } from '../scroll';
 import { clearDraft, loadDraft, saveDraft } from '../storage';
 import { c, s } from '../ui';
 
-/** Hitung buta: qty sistem tidak ditampilkan. */
+/** Hitung buta: qty sistem tidak ditampilkan. Item baru selalu masuk di paling bawah (urutan = urutan input). */
 export default function CountScreen({ navigation, route }: any) {
   const { loc, lokasi }: { loc: string; lokasi: string } = route.params;
   const [lines, setLines] = useState<CountLine[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [kosong, setKosong] = useState(false);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Item[]>([]);
   const [busy, setBusy] = useState(false);
@@ -17,16 +19,21 @@ export default function CountScreen({ navigation, route }: any) {
   const [msg, setMsg] = useState('');
   const ref = useRef<CountLine[]>([]);
   const inputs = useRef<Record<string, TextInput | null>>({});
+  const listRef = useRef<FlatList<CountLine>>(null);
   const [focusItem, setFocusItem] = useState<string | null>(null);
 
-  // tunggu layar scanner tertutup & list ter-render, baru fokus ke kolom qty
+  // gulir ke baris yang baru masuk, lalu fokus ke kolom qty-nya
   useEffect(() => {
     if (!focusItem) return;
-    const t = setTimeout(() => {
+    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((l) => l.item === focusItem), ref.current.length), 150);
+    const t2 = setTimeout(() => {
       inputs.current[focusItem]?.focus();
       setFocusItem(null);
-    }, 400);
-    return () => clearTimeout(t);
+    }, 500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [focusItem, lines]);
 
   useEffect(() => {
@@ -51,11 +58,9 @@ export default function CountScreen({ navigation, route }: any) {
     (it: Item, method: 'Manual' | 'Scan') => {
       const cur = ref.current;
       const idx = cur.findIndex((l) => l.item === it.name);
-      // item yang baru di-scan dipindah ke paling atas, lalu kursor diarahkan ke kolom qty-nya
-      if (idx >= 0) {
-        const l = cur[idx];
-        update([{ ...l, counted: l.counted + 1, method: method === 'Scan' ? 'Scan' : l.method }, ...cur.filter((_, i) => i !== idx)]);
-      } else update([{ item: it.name, item_name: it.item_name, uom: it.stock_uom, counted: 1, method }, ...cur]);
+      // sudah ada: qty +1 di tempatnya; baru: ditambah di paling bawah
+      if (idx >= 0) update(cur.map((l, i) => (i === idx ? { ...l, counted: l.counted + 1, method: method === 'Scan' ? 'Scan' : l.method } : l)));
+      else update([...cur, { item: it.name, item_name: it.item_name, uom: it.stock_uom, counted: 1, method }]);
       setFocusItem(it.name);
     },
     [update],
@@ -87,10 +92,30 @@ export default function CountScreen({ navigation, route }: any) {
     const n = parseFloat(text.replace(',', '.'));
     update(ref.current.map((l) => (l.item === item ? { ...l, counted: isNaN(n) || n < 0 ? 0 : n } : l)));
   };
+  const setNote = (item: string, notes: string) => update(ref.current.map((l) => (l.item === item ? { ...l, notes } : l)));
   const remove = (item: string) => update(ref.current.filter((l) => l.item !== item));
 
+  const toggleKosong = (on: boolean) => {
+    if (on && lines.length)
+      return Alert.alert('Tandai lokasi kosong?', `${lines.length} item yang sudah dihitung akan dihapus.`, [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Ya, kosong',
+          style: 'destructive',
+          onPress: () => {
+            update([]);
+            setKosong(true);
+          },
+        },
+      ]);
+    setKosong(on);
+  };
+
+  const zeroNoNote = lines.find((l) => l.counted === 0 && !(l.notes ?? '').trim());
+  const canSubmit = !busy && (kosong || (lines.length > 0 && !zeroNoNote));
+
   const submit = () =>
-    Alert.alert('Submit hasil hitung?', `${lines.length} item di ${lokasi}. Setelah submit tidak bisa diubah.`, [
+    Alert.alert('Submit hasil hitung?', (kosong ? `${lokasi} ditandai kosong.` : `${lines.length} item di ${lokasi}.`) + ' Setelah submit masih bisa diedit sampai divalidasi.', [
       { text: 'Batal', style: 'cancel' },
       {
         text: 'Submit',
@@ -98,9 +123,9 @@ export default function CountScreen({ navigation, route }: any) {
           setBusy(true);
           setErr('');
           try {
-            await submitLocation(loc, lines);
+            await submitLocation(loc, lines, kosong);
             await clearDraft(loc);
-            Alert.alert('Berhasil', `${lokasi} terkirim, menunggu validasi.`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+            Alert.alert('Berhasil', `${lokasi} terkirim, menunggu cek ulang.`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
           } catch (e: any) {
             setErr(e.message);
           } finally {
@@ -114,75 +139,103 @@ export default function CountScreen({ navigation, route }: any) {
 
   return (
     <View style={s.screen}>
-      <View style={[s.row, { marginBottom: 8 }]}>
-        <TextInput style={[s.input, { flex: 1 }]} placeholder="Cari item manual" value={q} onChangeText={setQ} autoCorrect={false} />
-        <TouchableOpacity style={s.btn} onPress={() => navigation.navigate('Scanner', { onScan })}>
-          <Text style={s.btnText}>Scan</Text>
-        </TouchableOpacity>
+      <View style={[s.card, s.row, { justifyContent: 'space-between', paddingVertical: 8 }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.title}>Lokasi Kosong</Text>
+          <Text style={s.muted}>Centang jika lokasi ini memang tidak ada barang</Text>
+        </View>
+        <Switch value={kosong} onValueChange={toggleKosong} />
       </View>
-      {!!err && <Text style={s.err}>{err}</Text>}
-      {!!msg && !q && <Text style={[s.muted, { marginBottom: 4 }]}>{msg}</Text>}
 
-      {q.trim().length >= 2 ? (
-        <FlatList
-          data={results}
-          keyExtractor={(i) => i.name}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={s.card}
-              onPress={() => {
-                addItem(item, 'Manual');
-                setQ('');
-              }}>
-              <Text style={s.title}>{item.item_name}</Text>
-              <Text style={s.muted}>{item.name} · {item.stock_uom}</Text>
-            </TouchableOpacity>
-          )}
-        />
+      {kosong ? (
+        <>
+          <Text style={[s.muted, { flex: 1, textAlign: 'center', marginTop: 24 }]}>Lokasi ditandai kosong, tidak perlu menambah item.</Text>
+          {!!err && <Text style={s.err}>{err}</Text>}
+        </>
       ) : (
         <>
-          <FlatList
-            data={lines}
-            keyExtractor={(l) => l.item}
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={<Text style={s.muted}>Belum ada item. Scan barcode atau cari manual.</Text>}
-            renderItem={({ item: l }) => (
-              <View style={s.card}>
-                <View style={[s.row, { justifyContent: 'space-between' }]}>
-                  <Text style={[s.title, { flex: 1 }]}>{l.item_name}</Text>
-                  <TouchableOpacity onPress={() => remove(l.item)}>
-                    <Text style={{ color: c.danger, fontSize: 18 }}>✕</Text>
-                  </TouchableOpacity>
+          <View style={[s.row, { marginBottom: 8 }]}>
+            <TextInput style={[s.input, { flex: 1 }]} placeholder="Cari item manual" value={q} onChangeText={setQ} autoCorrect={false} />
+            <TouchableOpacity style={s.btn} onPress={() => navigation.navigate('Scanner', { onScan })}>
+              <Text style={s.btnText}>Scan</Text>
+            </TouchableOpacity>
+          </View>
+          {!!err && <Text style={s.err}>{err}</Text>}
+          {!!msg && !q && <Text style={[s.muted, { marginBottom: 4 }]}>{msg}</Text>}
+
+          {q.trim().length >= 2 ? (
+            <FlatList
+              data={results}
+              keyExtractor={(i) => i.name}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={s.card}
+                  onPress={() => {
+                    addItem(item, 'Manual');
+                    setQ('');
+                  }}>
+                  <Text style={s.title}>{item.item_name}</Text>
+                  <Text style={s.muted}>{item.name} · {item.stock_uom}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          ) : (
+            <FlatList
+              ref={listRef}
+              data={lines}
+              keyExtractor={(l) => l.item}
+              keyboardShouldPersistTaps="handled"
+              onScrollToIndexFailed={onScrollFail(listRef)}
+              ListEmptyComponent={<Text style={s.muted}>Belum ada item. Scan barcode atau cari manual.</Text>}
+              renderItem={({ item: l, index }) => (
+                <View style={s.card}>
+                  <View style={[s.row, { justifyContent: 'space-between' }]}>
+                    <Text style={[s.title, { flex: 1 }]}>{index + 1}. {l.item_name}</Text>
+                    <TouchableOpacity onPress={() => remove(l.item)}>
+                      <Text style={{ color: c.danger, fontSize: 18 }}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={s.muted}>{l.item} · {l.uom}</Text>
+                  <View style={[s.row, { marginTop: 8 }]}>
+                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setCounted(l.item, String(Math.max(0, l.counted - 1)))}>
+                      <Text style={[s.btnText, s.btnAltText]}>−</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={[s.input, { width: 90, textAlign: 'center' }]}
+                      ref={(r) => {
+                        inputs.current[l.item] = r;
+                      }}
+                      selectTextOnFocus
+                      keyboardType="decimal-pad"
+                      defaultValue={String(l.counted)}
+                      key={`${l.item}-${l.counted}`}
+                      onEndEditing={(e) => setCounted(l.item, e.nativeEvent.text)}
+                    />
+                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setCounted(l.item, String(l.counted + 1))}>
+                      <Text style={[s.btnText, s.btnAltText]}>+</Text>
+                    </TouchableOpacity>
+                    <Text style={[s.muted, { marginLeft: 'auto' }]}>{l.method}</Text>
+                  </View>
+                  {l.counted === 0 && (
+                    <TextInput
+                      style={[s.input, { marginTop: 8 }, !(l.notes ?? '').trim() && { borderColor: c.warn }]}
+                      placeholder="Catatan wajib untuk qty 0 (mis. kosong)"
+                      value={l.notes ?? ''}
+                      onChangeText={(t) => setNote(l.item, t)}
+                    />
+                  )}
                 </View>
-                <Text style={s.muted}>{l.item} · {l.uom}</Text>
-                <View style={[s.row, { marginTop: 8 }]}>
-                  <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setCounted(l.item, String(Math.max(0, l.counted - 1)))}>
-                    <Text style={[s.btnText, s.btnAltText]}>−</Text>
-                  </TouchableOpacity>
-                  <TextInput
-                    style={[s.input, { width: 90, textAlign: 'center' }]}
-                    ref={(r) => {
-                      inputs.current[l.item] = r;
-                    }}
-                    selectTextOnFocus
-                    keyboardType="decimal-pad"
-                    defaultValue={String(l.counted)}
-                    key={`${l.item}-${l.counted}`}
-                    onEndEditing={(e) => setCounted(l.item, e.nativeEvent.text)}
-                  />
-                  <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setCounted(l.item, String(l.counted + 1))}>
-                    <Text style={[s.btnText, s.btnAltText]}>+</Text>
-                  </TouchableOpacity>
-                  <Text style={[s.muted, { marginLeft: 'auto' }]}>{l.method}</Text>
-                </View>
-              </View>
-            )}
-          />
-          <TouchableOpacity style={[s.btn, { marginTop: 8 }, (!lines.length || busy) && { opacity: 0.5 }]} onPress={submit} disabled={!lines.length || busy}>
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Submit ({lines.length} item)</Text>}
-          </TouchableOpacity>
+              )}
+            />
+          )}
         </>
+      )}
+
+      {(kosong || q.trim().length < 2) && (
+        <TouchableOpacity style={[s.btn, { marginTop: 8 }, !canSubmit && { opacity: 0.5 }]} onPress={submit} disabled={!canSubmit}>
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>{kosong ? 'Submit Lokasi Kosong' : `Submit (${lines.length} item)`}</Text>}
+        </TouchableOpacity>
       )}
     </View>
   );

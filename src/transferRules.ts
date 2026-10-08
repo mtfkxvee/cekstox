@@ -1,14 +1,14 @@
 import { request } from './api';
 
-export type Warehouse = { name: string; parent: string | null; isGroup: boolean; type: string | null };
+export type Warehouse = { name: string; parent: string | null; isGroup: boolean; type: string | null; useShelving: boolean };
 
 let whCache: Warehouse[] | null = null;
 export async function loadWarehouses(): Promise<Warehouse[]> {
   if (whCache) return whCache;
   const w = await request('/api/resource/Warehouse', {
-    params: { fields: ['name', 'parent_warehouse', 'is_group', 'warehouse_type'], filters: [['disabled', '=', 0]], order_by: 'name asc', limit_page_length: 5000 },
+    params: { fields: ['name', 'parent_warehouse', 'is_group', 'warehouse_type', 'use_shelving'], filters: [['disabled', '=', 0]], order_by: 'name asc', limit_page_length: 5000 },
   });
-  whCache = w.data.map((x: any) => ({ name: x.name, parent: x.parent_warehouse, isGroup: !!x.is_group, type: x.warehouse_type }));
+  whCache = w.data.map((x: any) => ({ name: x.name, parent: x.parent_warehouse, isGroup: !!x.is_group, type: x.warehouse_type, useShelving: !!x.use_shelving }));
   return whCache!;
 }
 

@@ -2,7 +2,7 @@
   "expo": {
     "name": "CEKSTOX",
     "slug": "cekstok",
-    "version": "1.0.2",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -54,13 +54,15 @@
             "enableMinifyInReleaseBuilds": true
           }
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "owner": "x-sha",
     "extra": {
       "eas": {
         "projectId": "f131e448-a0db-49e4-8ae0-cecb36c0761d"
       }
-    }
+    },
+    "scheme": "cekstox"
   }
 }

@@ -32,8 +32,8 @@ export default function OpnameListScreen({ navigation }: any) {
         renderItem={({ item }) => (
           <TouchableOpacity style={s.card} onPress={() => navigation.navigate('OpnameDetail', { name: item.name })}>
             <Text style={s.title}>{item.warehouse}</Text>
-            <Text style={s.muted}>{item.name} · {item.opname_date} · {item.jumlah_lokasi} lokasi</Text>
-            <Text style={s.muted}>{item.status}</Text>
+            <Text style={s.muted}>{item.name}{item.opname_date ? ` · ${item.opname_date} · ${item.jumlah_lokasi} lokasi` : ''}</Text>
+            {!!item.opname_date && <Text style={s.muted}>{item.status}</Text>}
             {!!item.notes && <Text style={s.muted}>{item.notes}</Text>}
           </TouchableOpacity>
         )}
