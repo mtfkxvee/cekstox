@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { logout, savedUser } from './src/api';
 import { loadRoles } from './src/opname';
 import ReceiveListScreen from './src/screens/ReceiveListScreen';
@@ -23,6 +23,12 @@ import ScannerScreen from './src/screens/ScannerScreen';
 import StockScreen from './src/screens/StockScreen';
 
 const Stack = createNativeStackNavigator();
+
+// Android baru menggambar layar sampai ke bawah (di balik tombol Home/Back); beri jarak agar tombol di bawah layar tidak tertutup
+function AppStack({ children }: { children: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
+  return <Stack.Navigator screenOptions={{ contentStyle: { paddingBottom: insets.bottom } }}>{children}</Stack.Navigator>;
+}
 
 export default function App() {
   const [user, setUser] = useState<string | null | undefined>(undefined);
@@ -57,8 +63,8 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer>
-        <Stack.Navigator>
-          <Stack.Screen name="Home" options={{ headerShown: false }}>
+        <AppStack>
+          <Stack.Screen name="Home" options={{ headerShown: false, contentStyle: { paddingBottom: 0 } }}>
             {(p) => <HomeScreen {...p} user={user} onLogout={async () => { await logout(); setUser(null); }} />}
           </Stack.Screen>
           <Stack.Screen name="Stock" component={StockScreen} options={{ title: 'Cek Stok' }} />
@@ -74,7 +80,7 @@ export default function App() {
           <Stack.Screen name="Receive" component={ReceiveScreen} />
           <Stack.Screen name="AturRak" component={AturRakScreen} options={{ title: 'Atur Rak' }} />
           <Stack.Screen name="WarehousePicker" component={WarehousePickerScreen} />
-        </Stack.Navigator>
+        </AppStack>
       </NavigationContainer>
       <StatusBar style="auto" />
     </SafeAreaProvider>

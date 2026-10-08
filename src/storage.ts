@@ -6,7 +6,8 @@ const key = (loc: string) => `count:${loc}`;
 export async function loadDraft(loc: string): Promise<CountLine[]> {
   try {
     const s = await AsyncStorage.getItem(key(loc));
-    return s ? JSON.parse(s) : [];
+    // draf lama belum punya id baris
+    return s ? (JSON.parse(s) as CountLine[]).map((l, i) => ({ ...l, id: l.id ?? `d${Date.now()}-${i}` })) : [];
   } catch {
     return [];
   }

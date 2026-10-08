@@ -6,6 +6,9 @@ import { itemShelfStocks, listShelves, Shelf, shelfLabelOf } from '../shelving';
 import { loadTransferRules, TransferRules } from '../transferRules';
 import { c, s } from '../ui';
 
+let seq = 0;
+const newId = () => `${Date.now()}-${++seq}`;
+
 export default function TransferScreen({ navigation }: any) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -52,7 +55,7 @@ export default function TransferScreen({ navigation }: any) {
 
   useEffect(() => {
     if (!focusItem) return;
-    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((x) => x.item === focusItem), ref.current.length), 150);
+    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((x) => x.id === focusItem), ref.current.length), 150);
     const t2 = setTimeout(() => {
       inputs.current[focusItem]?.focus();
       setFocusItem(null);
@@ -109,17 +112,17 @@ export default function TransferScreen({ navigation }: any) {
     });
 
   /** Pilih rak tujuan untuk semua item (header) atau satu item (item != null). */
-  const pickToShelf = (item: string | null) =>
+  const pickToShelf = (id: string | null) =>
     navigation.navigate('WarehousePicker', {
       title: 'Rak Tujuan',
       names: toShelves.map((x) => x.name),
       labels: Object.fromEntries(toShelves.map((x) => [x.name, x.label])),
       onPick: (name: string) => {
-        if (item === null) {
+        if (id === null) {
           defToRef.current = name;
           setDefTo(name);
           update(ref.current.map((l) => ({ ...l, toShelving: name })));
-        } else update(ref.current.map((l) => (l.item === item ? { ...l, toShelving: name } : l)));
+        } else update(ref.current.map((l) => (l.id === id ? { ...l, toShelving: name } : l)));
       },
     });
 
@@ -128,20 +131,16 @@ export default function TransferScreen({ navigation }: any) {
       title: 'Rak Asal',
       names: (l.stocks ?? []).map((x) => x.shelving),
       labels: Object.fromEntries((l.stocks ?? []).map((x) => [x.shelving, `${shelfLabelOf(x.shelving)} · stok ${x.qty}`])),
-      onPick: (name: string) => update(ref.current.map((x) => (x.item === l.item ? { ...x, fromShelving: name } : x))),
+      onPick: (name: string) => update(ref.current.map((x) => (x.id === l.id ? { ...x, fromShelving: name } : x))),
     });
 
+  // setiap scan/pilih membuat BARIS BARU (tidak menambah qty baris lama), karena rak tujuan bisa berbeda
   const addItem = useCallback(async (it: Item) => {
-    const cur = ref.current;
-    const idx = cur.findIndex((l) => l.item === it.name);
-    // sudah ada: qty +1 di tempatnya; baru: ditambah di paling bawah
-    if (idx >= 0) update(cur.map((x, i) => (i === idx ? { ...x, qty: x.qty + 1 } : x)));
-    else {
-      const avail = await getAvailable(it.name, fromRef.current);
-      const base: TransferLine = { item: it.name, item_name: it.item_name, uom: it.stock_uom, qty: 1, avail, toShelving: defToRef.current };
-      update([...ref.current, await withStocks(base, fromRef.current, fromUsesRef.current)]);
-    }
-    setFocusItem(it.name);
+    const avail = await getAvailable(it.name, fromRef.current);
+    const id = newId();
+    const base: TransferLine = { id, item: it.name, item_name: it.item_name, uom: it.stock_uom, qty: 1, avail, toShelving: defToRef.current };
+    update([...ref.current, await withStocks(base, fromRef.current, fromUsesRef.current)]);
+    setFocusItem(id);
   }, []);
 
   const needFrom = () => {
@@ -159,7 +158,7 @@ export default function TransferScreen({ navigation }: any) {
         if (!it) return setErr(`Barcode ${code} tidak ditemukan`);
         Vibration.vibrate(50);
         await addItem(it);
-        setMsg(`+1 ${it.item_name}`);
+        setMsg(`Baris baru: ${it.item_name}`);
       } catch (e: any) {
         setErr(e.message);
       }
@@ -167,14 +166,15 @@ export default function TransferScreen({ navigation }: any) {
     [addItem],
   );
 
-  const setQty = (item: string, text: string) => {
+  const setQty = (id: string, text: string) => {
     const n = parseFloat(text.replace(',', '.'));
-    update(ref.current.map((l) => (l.item === item ? { ...l, qty: isNaN(n) || n < 0 ? 0 : n } : l)));
+    update(ref.current.map((l) => (l.id === id ? { ...l, qty: isNaN(n) || n < 0 ? 0 : n } : l)));
   };
 
   // stok asal / stok rak kurang hanya diberi peringatan; XERP mengizinkan stok minus
   const shelfQty = (l: TransferLine) => (l.fromShelving ? l.stocks?.find((x) => x.shelving === l.fromShelving)?.qty : undefined);
-  const short = lines.filter((l) => l.qty > l.avail);
+  const totalOf = (item: string) => lines.reduce((a, x) => (x.item === item ? a + x.qty : a), 0);
+  const short = lines.filter((l, i) => totalOf(l.item) > l.avail && lines.findIndex((x) => x.item === l.item) === i);
   const shortShelf = lines.filter((l) => shelfQty(l) !== undefined && l.qty > (shelfQty(l) as number));
   const invalid = lines.some((l) => l.qty <= 0);
   // rak tujuan wajib bila gudang tujuan memakai rak; rak asal wajib bila item ada di lebih dari satu rak
@@ -263,7 +263,7 @@ export default function TransferScreen({ navigation }: any) {
             ref={listRef}
             data={lines}
             onScrollToIndexFailed={onScrollFail(listRef)}
-            keyExtractor={(l) => l.item}
+            keyExtractor={(l) => l.id}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={<Text style={s.muted}>Belum ada item. Scan barcode atau cari manual.</Text>}
             renderItem={({ item: l, index }) => {
@@ -274,7 +274,7 @@ export default function TransferScreen({ navigation }: any) {
                 <View style={s.card}>
                   <View style={[s.row, { justifyContent: 'space-between' }]}>
                     <Text style={[s.title, { flex: 1 }]}>{index + 1}. {l.item_name}</Text>
-                    <TouchableOpacity onPress={() => update(ref.current.filter((x) => x.item !== l.item))}>
+                    <TouchableOpacity onPress={() => update(ref.current.filter((x) => x.id !== l.id))}>
                       <Text style={{ color: c.danger, fontSize: 18 }}>✕</Text>
                     </TouchableOpacity>
                   </View>
@@ -293,32 +293,32 @@ export default function TransferScreen({ navigation }: any) {
                   )}
                   {toUses && (
                     <TouchableOpacity
-                      onPress={() => pickToShelf(l.item)}
+                      onPress={() => pickToShelf(l.id)}
                       style={{ marginTop: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#f1f4f8', borderWidth: 1, borderColor: l.toShelving ? c.border : c.warn }}>
                       <Text style={{ color: l.toShelving ? c.text : c.warn }}>Rak tujuan: {l.toShelving ? labelOfTo(l.toShelving) : 'pilih rak tujuan (wajib)'}  ▾</Text>
                     </TouchableOpacity>
                   )}
 
                   <View style={[s.row, { marginTop: 8 }]}>
-                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(l.item, String(Math.max(0, l.qty - 1)))}>
+                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(l.id, String(Math.max(0, l.qty - 1)))}>
                       <Text style={[s.btnText, s.btnAltText]}>−</Text>
                     </TouchableOpacity>
                     <TextInput
-                      style={[s.input, { width: 90, textAlign: 'center' }, (l.qty > l.avail || overShelf) && { borderColor: c.warn }]}
+                      style={[s.input, { width: 90, textAlign: 'center' }, (totalOf(l.item) > l.avail || overShelf) && { borderColor: c.warn }]}
                       ref={(r) => {
-                        inputs.current[l.item] = r;
+                        inputs.current[l.id] = r;
                       }}
                       selectTextOnFocus
                       keyboardType="decimal-pad"
                       defaultValue={String(l.qty)}
-                      key={`${l.item}-${l.qty}`}
-                      onEndEditing={(e) => setQty(l.item, e.nativeEvent.text)}
+                      key={`${l.id}-${l.qty}`}
+                      onEndEditing={(e) => setQty(l.id, e.nativeEvent.text)}
                     />
-                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(l.item, String(l.qty + 1))}>
+                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(l.id, String(l.qty + 1))}>
                       <Text style={[s.btnText, s.btnAltText]}>+</Text>
                     </TouchableOpacity>
                     <View style={{ marginLeft: 'auto', alignItems: 'flex-end' }}>
-                      {l.qty > l.avail && <Text style={{ color: c.warn, fontWeight: '600' }}>⚠ stok asal {l.avail}, jadi {l.avail - l.qty}</Text>}
+                      {totalOf(l.item) > l.avail && <Text style={{ color: c.warn, fontWeight: '600' }}>⚠ stok asal {l.avail}, total item ini {totalOf(l.item)}</Text>}
                       {overShelf && <Text style={{ color: c.warn, fontWeight: '600' }}>⚠ stok rak {sq}</Text>}
                     </View>
                   </View>

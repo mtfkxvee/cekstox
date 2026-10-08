@@ -14,7 +14,7 @@ export type Loc = {
   itemCount: number;
 };
 
-export type CountLine = { item: string; item_name: string; uom: string; counted: number; method: 'Manual' | 'Scan'; notes?: string };
+export type CountLine = { id: string; item: string; item_name: string; uom: string; counted: number; method: 'Manual' | 'Scan'; notes?: string };
 
 export type LocState = 'tersedia' | 'terisi' | 'cek' | 'menunggu' | 'divalidasi' | 'ditolak';
 

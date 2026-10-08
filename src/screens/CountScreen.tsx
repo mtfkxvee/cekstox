@@ -7,6 +7,9 @@ import { clearDraft, loadDraft, saveDraft } from '../storage';
 import { c, s } from '../ui';
 
 /** Hitung buta: qty sistem tidak ditampilkan. Item baru selalu masuk di paling bawah (urutan = urutan input). */
+let seq = 0;
+const newId = () => `${Date.now()}-${++seq}`;
+
 export default function CountScreen({ navigation, route }: any) {
   const { loc, lokasi }: { loc: string; lokasi: string } = route.params;
   const [lines, setLines] = useState<CountLine[]>([]);
@@ -25,7 +28,7 @@ export default function CountScreen({ navigation, route }: any) {
   // gulir ke baris yang baru masuk, lalu fokus ke kolom qty-nya
   useEffect(() => {
     if (!focusItem) return;
-    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((l) => l.item === focusItem), ref.current.length), 150);
+    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((l) => l.id === focusItem), ref.current.length), 150);
     const t2 = setTimeout(() => {
       inputs.current[focusItem]?.focus();
       setFocusItem(null);
@@ -54,14 +57,12 @@ export default function CountScreen({ navigation, route }: any) {
     [loc],
   );
 
+  // setiap scan/pilih membuat BARIS BARU (tidak menambah qty baris lama), urutan = urutan input
   const addItem = useCallback(
     (it: Item, method: 'Manual' | 'Scan') => {
-      const cur = ref.current;
-      const idx = cur.findIndex((l) => l.item === it.name);
-      // sudah ada: qty +1 di tempatnya; baru: ditambah di paling bawah
-      if (idx >= 0) update(cur.map((l, i) => (i === idx ? { ...l, counted: l.counted + 1, method: method === 'Scan' ? 'Scan' : l.method } : l)));
-      else update([...cur, { item: it.name, item_name: it.item_name, uom: it.stock_uom, counted: 1, method }]);
-      setFocusItem(it.name);
+      const id = newId();
+      update([...ref.current, { id, item: it.name, item_name: it.item_name, uom: it.stock_uom, counted: 1, method }]);
+      setFocusItem(id);
     },
     [update],
   );
@@ -74,7 +75,7 @@ export default function CountScreen({ navigation, route }: any) {
         if (!it) return setErr(`Barcode ${code} tidak ditemukan`);
         Vibration.vibrate(50);
         addItem(it, 'Scan');
-        setMsg(`+1 ${it.item_name}`);
+        setMsg(`Baris baru: ${it.item_name}`);
       } catch (e: any) {
         setErr(e.message);
       }
@@ -88,12 +89,12 @@ export default function CountScreen({ navigation, route }: any) {
     return () => clearTimeout(t);
   }, [q]);
 
-  const setCounted = (item: string, text: string) => {
+  const setCounted = (id: string, text: string) => {
     const n = parseFloat(text.replace(',', '.'));
-    update(ref.current.map((l) => (l.item === item ? { ...l, counted: isNaN(n) || n < 0 ? 0 : n } : l)));
+    update(ref.current.map((l) => (l.id === id ? { ...l, counted: isNaN(n) || n < 0 ? 0 : n } : l)));
   };
-  const setNote = (item: string, notes: string) => update(ref.current.map((l) => (l.item === item ? { ...l, notes } : l)));
-  const remove = (item: string) => update(ref.current.filter((l) => l.item !== item));
+  const setNote = (id: string, notes: string) => update(ref.current.map((l) => (l.id === id ? { ...l, notes } : l)));
+  const remove = (id: string) => update(ref.current.filter((l) => l.id !== id));
 
   const toggleKosong = (on: boolean) => {
     if (on && lines.length)
@@ -184,7 +185,7 @@ export default function CountScreen({ navigation, route }: any) {
             <FlatList
               ref={listRef}
               data={lines}
-              keyExtractor={(l) => l.item}
+              keyExtractor={(l) => l.id}
               keyboardShouldPersistTaps="handled"
               onScrollToIndexFailed={onScrollFail(listRef)}
               ListEmptyComponent={<Text style={s.muted}>Belum ada item. Scan barcode atau cari manual.</Text>}
@@ -192,27 +193,27 @@ export default function CountScreen({ navigation, route }: any) {
                 <View style={s.card}>
                   <View style={[s.row, { justifyContent: 'space-between' }]}>
                     <Text style={[s.title, { flex: 1 }]}>{index + 1}. {l.item_name}</Text>
-                    <TouchableOpacity onPress={() => remove(l.item)}>
+                    <TouchableOpacity onPress={() => remove(l.id)}>
                       <Text style={{ color: c.danger, fontSize: 18 }}>✕</Text>
                     </TouchableOpacity>
                   </View>
                   <Text style={s.muted}>{l.item} · {l.uom}</Text>
                   <View style={[s.row, { marginTop: 8 }]}>
-                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setCounted(l.item, String(Math.max(0, l.counted - 1)))}>
+                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setCounted(l.id, String(Math.max(0, l.counted - 1)))}>
                       <Text style={[s.btnText, s.btnAltText]}>−</Text>
                     </TouchableOpacity>
                     <TextInput
                       style={[s.input, { width: 90, textAlign: 'center' }]}
                       ref={(r) => {
-                        inputs.current[l.item] = r;
+                        inputs.current[l.id] = r;
                       }}
                       selectTextOnFocus
                       keyboardType="decimal-pad"
                       defaultValue={String(l.counted)}
-                      key={`${l.item}-${l.counted}`}
-                      onEndEditing={(e) => setCounted(l.item, e.nativeEvent.text)}
+                      key={`${l.id}-${l.counted}`}
+                      onEndEditing={(e) => setCounted(l.id, e.nativeEvent.text)}
                     />
-                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setCounted(l.item, String(l.counted + 1))}>
+                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setCounted(l.id, String(l.counted + 1))}>
                       <Text style={[s.btnText, s.btnAltText]}>+</Text>
                     </TouchableOpacity>
                     <Text style={[s.muted, { marginLeft: 'auto' }]}>{l.method}</Text>
@@ -222,7 +223,7 @@ export default function CountScreen({ navigation, route }: any) {
                       style={[s.input, { marginTop: 8 }, !(l.notes ?? '').trim() && { borderColor: c.warn }]}
                       placeholder="Catatan wajib untuk qty 0 (mis. kosong)"
                       value={l.notes ?? ''}
-                      onChangeText={(t) => setNote(l.item, t)}
+                      onChangeText={(t) => setNote(l.id, t)}
                     />
                   )}
                 </View>

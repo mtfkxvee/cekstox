@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { BinRow, findByBarcode, getStock, Item, searchItems } from '../api';
+import { itemShelfStocksAll, ShelfStock, shelfLabelOf } from '../shelving';
 import { loadWarehouses, Warehouse, warehousesUnder } from '../transferRules';
 import { c, s } from '../ui';
 
@@ -11,6 +12,7 @@ export default function StockScreen({ navigation }: any) {
   const [items, setItems] = useState<Item[]>([]);
   const [sel, setSel] = useState<Item | null>(null);
   const [bins, setBins] = useState<BinRow[]>([]);
+  const [shelves, setShelves] = useState<Record<string, ShelfStock[]>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [whs, setWhs] = useState<Warehouse[]>([]);
@@ -33,10 +35,14 @@ export default function StockScreen({ navigation }: any) {
   const open = useCallback(async (it: Item) => {
     setSel(it);
     setBins([]);
+    setShelves({});
     setBusy(true);
     setErr('');
     try {
-      setBins(await getStock(it.name));
+      // rak bersifat tambahan: kalau gagal dimuat, stok per gudang tetap tampil
+      const [b, sv] = await Promise.all([getStock(it.name), itemShelfStocksAll(it.name).catch(() => ({}))]);
+      setBins(b);
+      setShelves(sv);
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -127,6 +133,12 @@ export default function StockScreen({ navigation }: any) {
               <View style={{ flex: 1 }}>
                 <Text style={s.title}>{b.warehouse}</Text>
                 {b.reserved_qty > 0 && <Text style={s.muted}>reserved {b.reserved_qty} · projected {b.projected_qty}</Text>}
+                {(shelves[b.warehouse] ?? []).map((r) => (
+                  <View key={r.shelving} style={[s.row, { justifyContent: 'space-between', marginTop: 4, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: c.border }]}>
+                    <Text style={s.muted}>Rak {shelfLabelOf(r.shelving)}</Text>
+                    <Text style={{ color: r.qty > 0 ? c.text : c.danger, fontWeight: '600' }}>{r.qty}</Text>
+                  </View>
+                ))}
               </View>
               <Text style={{ fontSize: 18, fontWeight: '700', color: b.actual_qty > 0 ? c.ok : c.danger }}>{b.actual_qty}</Text>
             </View>

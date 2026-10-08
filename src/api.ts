@@ -186,6 +186,8 @@ export async function getAvailable(item: string, warehouse: string): Promise<num
 }
 
 export type TransferLine = {
+  /** id baris unik: item yang sama boleh muncul di beberapa baris (rak tujuan bisa berbeda) */
+  id: string;
   item: string;
   item_name: string;
   uom: string;

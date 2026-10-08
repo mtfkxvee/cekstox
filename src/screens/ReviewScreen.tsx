@@ -5,7 +5,10 @@ import { canCekUlang, cekUlangLocation, EditRow, getLocation, updateLocationItem
 import { onScrollFail, revealRow } from '../scroll';
 import { c, s } from '../ui';
 
-type Row = { name?: string; item_code: string; item_name: string; uom: string; counted_qty: number; input_method: string; notes: string };
+let seq = 0;
+const newId = () => `n${Date.now()}-${++seq}`;
+
+type Row = { id: string; name?: string; item_code: string; item_name: string; uom: string; counted_qty: number; input_method: string; notes: string };
 
 const sig = (rows: Row[], kosong: boolean) => JSON.stringify([kosong, rows.map((r) => [r.name, r.item_code, r.counted_qty, r.notes])]);
 
@@ -31,6 +34,7 @@ export default function ReviewScreen({ navigation, route }: any) {
 
   const apply = (d: any) => {
     const r: Row[] = (d.items ?? []).map((i: any) => ({
+      id: i.name,
       name: i.name,
       item_code: i.item_code,
       item_name: i.item_name,
@@ -56,7 +60,7 @@ export default function ReviewScreen({ navigation, route }: any) {
 
   useEffect(() => {
     if (!focusItem) return;
-    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((x) => x.item_code === focusItem), ref.current.length), 150);
+    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((x) => x.id === focusItem), ref.current.length), 150);
     const t2 = setTimeout(() => {
       inputs.current[focusItem]?.focus();
       setFocusItem(null);
@@ -82,13 +86,11 @@ export default function ReviewScreen({ navigation, route }: any) {
     setRows(next);
   };
 
+  // setiap scan/pilih membuat BARIS BARU (tidak menambah qty baris lama), urutan = urutan input
   const addItem = useCallback((it: Item, method: 'Manual' | 'Scan') => {
-    const cur = ref.current;
-    const idx = cur.findIndex((r) => r.item_code === it.name);
-    // sudah ada: qty +1 di tempatnya; baru: ditambah di paling bawah
-    if (idx >= 0) update(cur.map((x, i) => (i === idx ? { ...x, counted_qty: x.counted_qty + 1 } : x)));
-    else update([...cur, { item_code: it.name, item_name: it.item_name, uom: it.stock_uom, counted_qty: 1, input_method: method, notes: '' }]);
-    setFocusItem(it.name);
+    const id = newId();
+    update([...ref.current, { id, item_code: it.name, item_name: it.item_name, uom: it.stock_uom, counted_qty: 1, input_method: method, notes: '' }]);
+    setFocusItem(id);
   }, []);
 
   const onScan = useCallback(
@@ -99,7 +101,7 @@ export default function ReviewScreen({ navigation, route }: any) {
         if (!it) return setErr(`Barcode ${code} tidak ditemukan`);
         Vibration.vibrate(50);
         addItem(it, 'Scan');
-        setMsg(`+1 ${it.item_name}`);
+        setMsg(`Baris baru: ${it.item_name}`);
       } catch (e: any) {
         setErr(e.message);
       }
@@ -107,11 +109,11 @@ export default function ReviewScreen({ navigation, route }: any) {
     [addItem],
   );
 
-  const setQty = (code: string, text: string) => {
+  const setQty = (id: string, text: string) => {
     const n = parseFloat(text.replace(',', '.'));
-    update(ref.current.map((r) => (r.item_code === code ? { ...r, counted_qty: isNaN(n) || n < 0 ? 0 : n } : r)));
+    update(ref.current.map((r) => (r.id === id ? { ...r, counted_qty: isNaN(n) || n < 0 ? 0 : n } : r)));
   };
-  const setNote = (code: string, notes: string) => update(ref.current.map((r) => (r.item_code === code ? { ...r, notes } : r)));
+  const setNote = (id: string, notes: string) => update(ref.current.map((r) => (r.id === id ? { ...r, notes } : r)));
 
   const toggleKosong = (on: boolean) => {
     if (on && rows.length)
@@ -232,7 +234,7 @@ export default function ReviewScreen({ navigation, route }: any) {
           <FlatList
             ref={listRef}
             data={rows}
-            keyExtractor={(r) => r.item_code}
+            keyExtractor={(r) => r.id}
             keyboardShouldPersistTaps="handled"
             onScrollToIndexFailed={onScrollFail(listRef)}
             ListEmptyComponent={<Text style={s.muted}>{kosong ? 'Lokasi ini ditandai kosong (tidak ada barang).' : 'Belum ada item.'}</Text>}
@@ -241,7 +243,7 @@ export default function ReviewScreen({ navigation, route }: any) {
                 <View style={[s.row, { justifyContent: 'space-between' }]}>
                   <Text style={[s.title, { flex: 1 }]}>{index + 1}. {r.item_name}</Text>
                   {!locked && (
-                    <TouchableOpacity onPress={() => update(ref.current.filter((x) => x.item_code !== r.item_code))}>
+                    <TouchableOpacity onPress={() => update(ref.current.filter((x) => x.id !== r.id))}>
                       <Text style={{ color: c.danger, fontSize: 18 }}>✕</Text>
                     </TouchableOpacity>
                   )}
@@ -252,21 +254,21 @@ export default function ReviewScreen({ navigation, route }: any) {
                 ) : (
                   <>
                     <View style={[s.row, { marginTop: 8 }]}>
-                      <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(r.item_code, String(Math.max(0, r.counted_qty - 1)))}>
+                      <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(r.id, String(Math.max(0, r.counted_qty - 1)))}>
                         <Text style={[s.btnText, s.btnAltText]}>−</Text>
                       </TouchableOpacity>
                       <TextInput
                         style={[s.input, { width: 90, textAlign: 'center' }]}
                         ref={(x) => {
-                          inputs.current[r.item_code] = x;
+                          inputs.current[r.id] = x;
                         }}
                         selectTextOnFocus
                         keyboardType="decimal-pad"
                         defaultValue={String(r.counted_qty)}
-                        key={`${r.item_code}-${r.counted_qty}`}
-                        onEndEditing={(e) => setQty(r.item_code, e.nativeEvent.text)}
+                        key={`${r.id}-${r.counted_qty}`}
+                        onEndEditing={(e) => setQty(r.id, e.nativeEvent.text)}
                       />
-                      <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(r.item_code, String(r.counted_qty + 1))}>
+                      <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(r.id, String(r.counted_qty + 1))}>
                         <Text style={[s.btnText, s.btnAltText]}>+</Text>
                       </TouchableOpacity>
                       <Text style={[s.muted, { marginLeft: 'auto' }]}>{r.uom}</Text>
@@ -276,7 +278,7 @@ export default function ReviewScreen({ navigation, route }: any) {
                         style={[s.input, { marginTop: 8 }, r.counted_qty === 0 && !r.notes.trim() && { borderColor: c.warn }]}
                         placeholder={r.counted_qty === 0 ? 'Catatan wajib untuk qty 0 (mis. kosong)' : 'Catatan'}
                         value={r.notes}
-                        onChangeText={(t) => setNote(r.item_code, t)}
+                        onChangeText={(t) => setNote(r.id, t)}
                       />
                     )}
                   </>

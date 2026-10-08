@@ -61,3 +61,13 @@ export async function createShelvingTransfer(type: ShelvingTransferType, warehou
   }
   return r.data.name;
 }
+
+/** Stok satu item per rak di SEMUA gudang, dikelompokkan per gudang (untuk layar Cek Stok). */
+export async function itemShelfStocksAll(item: string): Promise<Record<string, ShelfStock[]>> {
+  const r = await request('/api/resource/Shelving Bin', {
+    params: { fields: ['shelving', 'warehouse', 'actual_qty'], filters: [['item_code', '=', item]], order_by: 'actual_qty desc', limit_page_length: 500 },
+  });
+  const out: Record<string, ShelfStock[]> = {};
+  for (const x of r.data) if (x.actual_qty !== 0) (out[x.warehouse] ??= []).push({ shelving: x.shelving, qty: x.actual_qty });
+  return out;
+}

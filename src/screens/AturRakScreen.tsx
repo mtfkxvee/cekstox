@@ -6,7 +6,10 @@ import { createShelvingTransfer, itemShelfStocks, listShelves, Shelf, shelfLabel
 import { loadTransferRules, TransferRules } from '../transferRules';
 import { c, s } from '../ui';
 
-type Line = { item: string; item_name: string; uom: string; qty: number; stocks: ShelfStock[]; from: string | null; to: string | null };
+type Line = { id: string; item: string; item_name: string; uom: string; qty: number; stocks: ShelfStock[]; from: string | null; to: string | null };
+
+let seq = 0;
+const newId = () => `${Date.now()}-${++seq}`;
 
 const TYPES: { key: ShelvingTransferType; label: string; hint: string; needFrom: boolean; needTo: boolean }[] = [
   { key: 'Put-away', label: 'Put-away', hint: 'Menata barang ke rak', needFrom: false, needTo: true },
@@ -69,7 +72,7 @@ export default function AturRakScreen({ navigation }: any) {
 
   useEffect(() => {
     if (!focusItem) return;
-    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((x) => x.item === focusItem), ref.current.length), 150);
+    const t1 = setTimeout(() => revealRow(listRef.current, ref.current.findIndex((x) => x.id === focusItem), ref.current.length), 150);
     const t2 = setTimeout(() => {
       inputs.current[focusItem]?.focus();
       setFocusItem(null);
@@ -104,17 +107,17 @@ export default function AturRakScreen({ navigation }: any) {
     update(ref.current.map((l) => ({ ...l, to: t.needTo ? l.to ?? defToRef.current : null, from: t.needFrom ? l.from ?? (l.stocks.length === 1 ? l.stocks[0].shelving : null) : l.from })));
   };
 
-  const pickTo = (item: string | null) =>
+  const pickTo = (id: string | null) =>
     navigation.navigate('WarehousePicker', {
       title: 'Rak Tujuan',
       names: shelves.map((x) => x.name),
       labels: Object.fromEntries(shelves.map((x) => [x.name, x.label])),
       onPick: (name: string) => {
-        if (item === null) {
+        if (id === null) {
           defToRef.current = name;
           setDefTo(name);
           update(ref.current.map((l) => ({ ...l, to: name })));
-        } else update(ref.current.map((l) => (l.item === item ? { ...l, to: name } : l)));
+        } else update(ref.current.map((l) => (l.id === id ? { ...l, to: name } : l)));
       },
     });
 
@@ -123,23 +126,20 @@ export default function AturRakScreen({ navigation }: any) {
       title: 'Rak Asal',
       names: l.stocks.map((x) => x.shelving),
       labels: Object.fromEntries(l.stocks.map((x) => [x.shelving, `${shelfLabelOf(x.shelving)} · stok ${x.qty}`])),
-      onPick: (name: string) => update(ref.current.map((x) => (x.item === l.item ? { ...x, from: name } : x))),
+      onPick: (name: string) => update(ref.current.map((x) => (x.id === l.id ? { ...x, from: name } : x))),
     });
 
+  // setiap scan/pilih membuat BARIS BARU (tidak menambah qty baris lama), karena rak tujuan bisa berbeda
   const addItem = useCallback(async (it: Item) => {
-    const cur = ref.current;
-    const idx = cur.findIndex((l) => l.item === it.name);
-    if (idx >= 0) update(cur.map((x, i) => (i === idx ? { ...x, qty: x.qty + 1 } : x)));
-    else {
-      const stocks = await itemShelfStocks(it.name, whRef.current);
-      const t = TYPES.find((x) => x.key === typeRef.current)!;
-      if (t.needFrom && !stocks.length) throw new Error(`${it.item_name} tidak punya stok di rak mana pun di gudang ini.`);
-      update([
-        ...ref.current,
-        { item: it.name, item_name: it.item_name, uom: it.stock_uom, qty: 1, stocks, from: stocks.length === 1 ? stocks[0].shelving : null, to: t.needTo ? defToRef.current : null },
-      ]);
-    }
-    setFocusItem(it.name);
+    const stocks = await itemShelfStocks(it.name, whRef.current);
+    const t = TYPES.find((x) => x.key === typeRef.current)!;
+    if (t.needFrom && !stocks.length) throw new Error(`${it.item_name} tidak punya stok di rak mana pun di gudang ini.`);
+    const id = newId();
+    update([
+      ...ref.current,
+      { id, item: it.name, item_name: it.item_name, uom: it.stock_uom, qty: 1, stocks, from: stocks.length === 1 ? stocks[0].shelving : null, to: t.needTo ? defToRef.current : null },
+    ]);
+    setFocusItem(id);
   }, []);
 
   const needWh = () => {
@@ -157,7 +157,7 @@ export default function AturRakScreen({ navigation }: any) {
         if (!it) return setErr(`Barcode ${code} tidak ditemukan`);
         await addItem(it);
         Vibration.vibrate(50);
-        setMsg(`+1 ${it.item_name}`);
+        setMsg(`Baris baru: ${it.item_name}`);
       } catch (e: any) {
         setErr(e.message);
       }
@@ -165,9 +165,9 @@ export default function AturRakScreen({ navigation }: any) {
     [addItem],
   );
 
-  const setQty = (item: string, text: string) => {
+  const setQty = (id: string, text: string) => {
     const n = parseFloat(text.replace(',', '.'));
-    update(ref.current.map((l) => (l.item === item ? { ...l, qty: isNaN(n) || n < 0 ? 0 : n } : l)));
+    update(ref.current.map((l) => (l.id === id ? { ...l, qty: isNaN(n) || n < 0 ? 0 : n } : l)));
   };
 
   const fromQty = (l: Line) => (l.from ? l.stocks.find((x) => x.shelving === l.from)?.qty : undefined);
@@ -260,7 +260,7 @@ export default function AturRakScreen({ navigation }: any) {
             ref={listRef}
             data={lines}
             onScrollToIndexFailed={onScrollFail(listRef)}
-            keyExtractor={(l) => l.item}
+            keyExtractor={(l) => l.id}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={<Text style={s.muted}>Belum ada item. Scan barcode atau cari manual.</Text>}
             renderItem={({ item: l, index }) => {
@@ -270,7 +270,7 @@ export default function AturRakScreen({ navigation }: any) {
                 <View style={s.card}>
                   <View style={[s.row, { justifyContent: 'space-between' }]}>
                     <Text style={[s.title, { flex: 1 }]}>{index + 1}. {l.item_name}</Text>
-                    <TouchableOpacity onPress={() => update(ref.current.filter((x) => x.item !== l.item))}>
+                    <TouchableOpacity onPress={() => update(ref.current.filter((x) => x.id !== l.id))}>
                       <Text style={{ color: c.danger, fontSize: 18 }}>✕</Text>
                     </TouchableOpacity>
                   </View>
@@ -289,28 +289,28 @@ export default function AturRakScreen({ navigation }: any) {
                   )}
                   {T.needTo && (
                     <TouchableOpacity
-                      onPress={() => pickTo(l.item)}
+                      onPress={() => pickTo(l.id)}
                       style={{ marginTop: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#f1f4f8', borderWidth: 1, borderColor: l.to ? c.border : c.warn }}>
                       <Text style={{ color: l.to ? c.text : c.warn }}>Rak tujuan: {l.to ? labelOf(l.to) : 'pilih rak tujuan (wajib)'}  ▾</Text>
                     </TouchableOpacity>
                   )}
 
                   <View style={[s.row, { marginTop: 8 }]}>
-                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(l.item, String(Math.max(0, l.qty - 1)))}>
+                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(l.id, String(Math.max(0, l.qty - 1)))}>
                       <Text style={[s.btnText, s.btnAltText]}>−</Text>
                     </TouchableOpacity>
                     <TextInput
                       style={[s.input, { width: 90, textAlign: 'center' }, fq !== undefined && l.qty > fq && { borderColor: c.warn }]}
                       ref={(r) => {
-                        inputs.current[l.item] = r;
+                        inputs.current[l.id] = r;
                       }}
                       selectTextOnFocus
                       keyboardType="decimal-pad"
                       defaultValue={String(l.qty)}
-                      key={`${l.item}-${l.qty}`}
-                      onEndEditing={(e) => setQty(l.item, e.nativeEvent.text)}
+                      key={`${l.id}-${l.qty}`}
+                      onEndEditing={(e) => setQty(l.id, e.nativeEvent.text)}
                     />
-                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(l.item, String(l.qty + 1))}>
+                    <TouchableOpacity style={[s.btn, s.btnAlt, { paddingHorizontal: 14 }]} onPress={() => setQty(l.id, String(l.qty + 1))}>
                       <Text style={[s.btnText, s.btnAltText]}>+</Text>
                     </TouchableOpacity>
                     {fq !== undefined && l.qty > fq && <Text style={{ color: c.warn, marginLeft: 'auto', fontWeight: '600' }}>⚠ stok rak {fq}</Text>}
