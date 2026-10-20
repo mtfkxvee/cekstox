@@ -71,3 +71,36 @@ export async function itemShelfStocksAll(item: string): Promise<Record<string, S
   for (const x of r.data) if (x.actual_qty !== 0) (out[x.warehouse] ??= []).push({ shelving: x.shelving, qty: x.actual_qty });
   return out;
 }
+
+export type ShelfSummary = { items: number; qty: number };
+
+/** Jumlah item & total qty per rak di satu gudang (hanya stok lebih dari 0). */
+export async function shelfSummaries(warehouse: string): Promise<Record<string, ShelfSummary>> {
+  const r = await request('/api/resource/Shelving Bin', {
+    params: {
+      fields: ['shelving', 'count(name) as n', 'sum(actual_qty) as qty'],
+      filters: [['warehouse', '=', warehouse], ['actual_qty', '>', 0]],
+      group_by: 'shelving',
+      limit_page_length: 500,
+    },
+  });
+  return Object.fromEntries(r.data.map((x: any) => [x.shelving, { items: x.n, qty: x.qty }]));
+}
+
+export type ShelfItem = { item: string; item_name: string; uom: string; qty: number };
+
+/** Semua item yang ada di satu rak (qty bukan 0), lengkap dengan nama & satuan item. */
+export async function shelfContents(shelving: string): Promise<ShelfItem[]> {
+  const r = await request('/api/resource/Shelving Bin', {
+    params: { fields: ['item_code', 'actual_qty'], filters: [['shelving', '=', shelving], ['actual_qty', '!=', 0]], order_by: 'item_code asc', limit_page_length: 1000 },
+  });
+  const rows: { item_code: string; actual_qty: number }[] = r.data;
+  if (!rows.length) return [];
+  const it = await request('/api/resource/Item', {
+    params: { fields: ['name', 'item_name', 'stock_uom'], filters: [['name', 'in', rows.map((x) => x.item_code)]], limit_page_length: 1000 },
+  });
+  const by = new Map<string, any>(it.data.map((x: any) => [x.name, x]));
+  return rows
+    .map((x) => ({ item: x.item_code, item_name: by.get(x.item_code)?.item_name ?? x.item_code, uom: by.get(x.item_code)?.stock_uom ?? '', qty: x.actual_qty }))
+    .sort((a, b) => a.item_name.localeCompare(b.item_name));
+}

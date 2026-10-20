@@ -9,6 +9,7 @@ import { loadRoles } from './src/opname';
 import ReceiveListScreen from './src/screens/ReceiveListScreen';
 import ReceiveScreen from './src/screens/ReceiveScreen';
 import AturRakScreen from './src/screens/AturRakScreen';
+import CekRakScreen from './src/screens/CekRakScreen';
 import HistoryDetailScreen from './src/screens/HistoryDetailScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -79,6 +80,7 @@ export default function App() {
           <Stack.Screen name="ReceiveList" component={ReceiveListScreen} options={{ title: 'Terima Stok (PO)' }} />
           <Stack.Screen name="Receive" component={ReceiveScreen} />
           <Stack.Screen name="AturRak" component={AturRakScreen} options={{ title: 'Atur Rak' }} />
+          <Stack.Screen name="CekRak" component={CekRakScreen} options={{ title: 'Cek Rak' }} />
           <Stack.Screen name="WarehousePicker" component={WarehousePickerScreen} />
         </AppStack>
       </NavigationContainer>

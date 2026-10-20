@@ -11,6 +11,7 @@ const MENUS: Menu[] = [
   { route: 'OpnameList', title: 'Stok Opname', desc: 'Hitung fisik per lokasi', icon: 'clipboard', color: '#1a7f37', bg: '#dcf5e3' },
   { route: 'Transfer', title: 'Pindah Stok', desc: 'Transfer barang antar gudang', icon: 'swap-horizontal', color: '#c2570c', bg: '#ffe9d6' },
   { route: 'AturRak', title: 'Atur Rak', desc: 'Put-away, pindah rak, keluarkan dari rak', icon: 'layers', color: '#9333ea', bg: '#f1e4fd' },
+  { route: 'CekRak', title: 'Cek Rak', desc: 'Lihat item apa saja di satu rak', icon: 'grid', color: '#be185d', bg: '#fce7f3' },
   { route: 'ReceiveList', title: 'Terima Stok', desc: 'Penerimaan barang dari Purchase Order', icon: 'download', color: '#0f766e', bg: '#d5f2ee' },
   { route: 'History', title: 'Riwayat Pindah Stok', desc: 'Daftar transfer stok gudang Anda', icon: 'time', color: '#6f42c1', bg: '#ece4fa' },
 ];
