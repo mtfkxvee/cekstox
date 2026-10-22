@@ -87,20 +87,53 @@ export async function shelfSummaries(warehouse: string): Promise<Record<string, 
   return Object.fromEntries(r.data.map((x: any) => [x.shelving, { items: x.n, qty: x.qty }]));
 }
 
-export type ShelfItem = { item: string; item_name: string; uom: string; qty: number };
+export type ShelfItem = { shelving: string; item: string; item_name: string; uom: string; qty: number };
+
+/** Bagi kode item menjadi beberapa kelompok agar URL request tetap di bawah batas server (±4000 karakter). */
+function chunkCodes(codes: string[], budget = 2500): string[][] {
+  const out: string[][] = [];
+  let cur: string[] = [];
+  let len = 0;
+  for (const code of codes) {
+    const n = encodeURIComponent(JSON.stringify(code)).length + 3;
+    if (cur.length && len + n > budget) {
+      out.push(cur);
+      cur = [];
+      len = 0;
+    }
+    cur.push(code);
+    len += n;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+/** Lengkapi baris Shelving Bin dengan nama & satuan item. */
+async function withItemNames(rows: { shelving: string; item_code: string; actual_qty: number }[]): Promise<ShelfItem[]> {
+  const by = new Map<string, any>();
+  for (const part of chunkCodes([...new Set(rows.map((x) => x.item_code))])) {
+    const it = await request('/api/resource/Item', {
+      params: { fields: ['name', 'item_name', 'stock_uom'], filters: [['name', 'in', part]], limit_page_length: part.length },
+    });
+    for (const x of it.data) by.set(x.name, x);
+  }
+  return rows
+    .map((x) => ({ shelving: x.shelving, item: x.item_code, item_name: by.get(x.item_code)?.item_name ?? x.item_code, uom: by.get(x.item_code)?.stock_uom ?? '', qty: x.actual_qty }))
+    .sort((a, b) => a.item_name.localeCompare(b.item_name));
+}
 
 /** Semua item yang ada di satu rak (qty bukan 0), lengkap dengan nama & satuan item. */
 export async function shelfContents(shelving: string): Promise<ShelfItem[]> {
   const r = await request('/api/resource/Shelving Bin', {
-    params: { fields: ['item_code', 'actual_qty'], filters: [['shelving', '=', shelving], ['actual_qty', '!=', 0]], order_by: 'item_code asc', limit_page_length: 1000 },
+    params: { fields: ['shelving', 'item_code', 'actual_qty'], filters: [['shelving', '=', shelving], ['actual_qty', '!=', 0]], limit_page_length: 1000 },
   });
-  const rows: { item_code: string; actual_qty: number }[] = r.data;
-  if (!rows.length) return [];
-  const it = await request('/api/resource/Item', {
-    params: { fields: ['name', 'item_name', 'stock_uom'], filters: [['name', 'in', rows.map((x) => x.item_code)]], limit_page_length: 1000 },
+  return withItemNames(r.data);
+}
+
+/** Isi SEMUA rak di satu gudang (qty bukan 0). */
+export async function warehouseShelfContents(warehouse: string): Promise<ShelfItem[]> {
+  const r = await request('/api/resource/Shelving Bin', {
+    params: { fields: ['shelving', 'item_code', 'actual_qty'], filters: [['warehouse', '=', warehouse], ['actual_qty', '!=', 0]], limit_page_length: 10000 },
   });
-  const by = new Map<string, any>(it.data.map((x: any) => [x.name, x]));
-  return rows
-    .map((x) => ({ item: x.item_code, item_name: by.get(x.item_code)?.item_name ?? x.item_code, uom: by.get(x.item_code)?.stock_uom ?? '', qty: x.actual_qty }))
-    .sort((a, b) => a.item_name.localeCompare(b.item_name));
+  return withItemNames(r.data);
 }
