@@ -21,6 +21,8 @@ import ReviewScreen from './src/screens/ReviewScreen';
 import TransferScreen from './src/screens/TransferScreen';
 import WarehousePickerScreen from './src/screens/WarehousePickerScreen';
 import ScannerScreen from './src/screens/ScannerScreen';
+import StandardRakDetailScreen from './src/screens/StandardRakDetailScreen';
+import StandardRakScreen from './src/screens/StandardRakScreen';
 import StockScreen from './src/screens/StockScreen';
 
 const Stack = createNativeStackNavigator();
@@ -81,6 +83,8 @@ export default function App() {
           <Stack.Screen name="Receive" component={ReceiveScreen} />
           <Stack.Screen name="AturRak" component={AturRakScreen} options={{ title: 'Atur Rak' }} />
           <Stack.Screen name="CekRak" component={CekRakScreen} options={{ title: 'Cek Rak' }} />
+          <Stack.Screen name="StandardRak" component={StandardRakScreen} options={{ title: 'Standard Rak' }} />
+          <Stack.Screen name="StandardRakDetail" component={StandardRakDetailScreen} />
           <Stack.Screen name="WarehousePicker" component={WarehousePickerScreen} />
         </AppStack>
       </NavigationContainer>

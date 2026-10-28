@@ -7,6 +7,7 @@ import { c } from '../ui';
 type Menu = { route: string; title: string; desc: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string };
 
 const MENUS: Menu[] = [
+  { route: 'StandardRak', title: 'Standard Rak', desc: 'Cek & ubah standar isi rak per outlet', icon: 'albums', color: '#b45309', bg: '#fef3c7' },
   { route: 'Stock', title: 'Cek Stok', desc: 'Lihat stok barang per gudang', icon: 'search', color: '#1f6feb', bg: '#e3eeff' },
   { route: 'OpnameList', title: 'Stok Opname', desc: 'Hitung fisik per lokasi', icon: 'clipboard', color: '#1a7f37', bg: '#dcf5e3' },
   { route: 'Transfer', title: 'Pindah Stok', desc: 'Transfer barang antar gudang', icon: 'swap-horizontal', color: '#c2570c', bg: '#ffe9d6' },
