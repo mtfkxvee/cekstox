@@ -23,11 +23,9 @@
       "predictiveBackGestureEnabled": false,
       "package": "id.xsha.cekstok",
       "permissions": [
-        "CAMERA",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "CAMERA",
-        "android.permission.CAMERA",
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -39,7 +37,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Kamera dipakai untuk scan barcode barang."
+          "cameraPermission": "Kamera dipakai untuk scan barcode barang.",
+          "recordAudioAndroid": false
         }
       ],
       [
